@@ -7,5 +7,12 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "json-logic-js": "^2.0.5",
+    "zod": "^4.6.6"
+  },
+  "devDependencies": {
+    "@types/json-logic-js": "^2.0.8"
   }
 }

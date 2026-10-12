@@ -1,0 +1,31 @@
+{
+  "id": "traffic-light",
+  "initial": "RED",
+  "states": ["RED", "GREEN", "YELLOW"],
+  "transitions": [
+    {
+      "from": "RED",
+      "event": "TIMER",
+      "actions": [
+        { "do": "inc", "key": "cycles" },
+        { "do": "startTimer", "ms": 3000, "event": "TIMER" }
+      ],
+      "to": "GREEN",
+      "label": { "event": "timer", "action": "cycles++" }
+    },
+    {
+      "from": "GREEN",
+      "event": "TIMER",
+      "actions": [{ "do": "startTimer", "ms": 1000, "event": "TIMER" }],
+      "to": "YELLOW",
+      "label": { "event": "timer" }
+    },
+    {
+      "from": "YELLOW",
+      "event": "TIMER",
+      "actions": [{ "do": "startTimer", "ms": 3000, "event": "TIMER" }],
+      "to": "RED",
+      "label": { "event": "timer" }
+    }
+  ]
+}
