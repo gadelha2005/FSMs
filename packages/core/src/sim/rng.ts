@@ -1,14 +1,6 @@
-/**
- * Gerador pseudoaleatório com seed (mulberry32).
- * Mesma seed => mesma sequência de números => mesmas falhas no canal.
- * Nunca use Math.random() dentro do core: isso quebraria o determinismo.
- */
 export interface Rng {
-  /** Número em [0, 1). */
   next(): number;
-  /** Inteiro em [min, max], inclusivo. */
   int(min: number, max: number): number;
-  /** true com probabilidade p (0..1). */
   chance(p: number): boolean;
 }
 
