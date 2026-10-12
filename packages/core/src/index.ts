@@ -12,3 +12,13 @@ export type {
   FsmTrace,
 } from './engine/fsm-engine';
 export { FsmDefinitionSchema, type FsmDefinition, type FsmTransition } from './engine/schema';
+export { Channel } from './channel/channel';
+export type {
+  ChannelEvent,
+  FaultRule,
+  Frame,
+  FrameHandler,
+  LossReason,
+  SentFrame,
+} from './channel/channel';
+export { DEFAULT_CHANNEL_PARAMS, validateParams, type ChannelParams } from './channel/params';
