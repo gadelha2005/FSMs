@@ -1,3 +1,14 @@
 export { buildResult, check } from './scenario';
 export type { Check, Scenario, ScenarioProtocol, ScenarioResult } from './scenario';
 export { buildUdpBench, scenario8, scenario9, sentFrom, udpScenarios } from './udp';
+export { buildTcpBench, sentFrames, wire } from './tcp-bench';
+export type { TcpBench, TcpBenchOptions } from './tcp-bench';
+export {
+  scenario1,
+  scenario2,
+  scenario3,
+  scenario4,
+  scenario5,
+  scenario7,
+  tcpConnectionScenarios,
+} from './tcp';

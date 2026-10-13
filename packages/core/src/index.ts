@@ -40,3 +40,22 @@ export {
   type UdpReceived,
 } from './protocols/udp/udp-host';
 export { analyzeDelivery, packId, unpackId, type DeliveryReport } from './analysis/delivery';
+export {
+  TCP_HEADER_LENGTH,
+  decodeSegment,
+  encodeSegment,
+  flagNames,
+  flagsFromNames,
+  segmentLength,
+  type FlagName,
+  type TcpDecodeFailure,
+  type TcpDecodeResult,
+  type TcpFlags,
+  type TcpSegment,
+} from './protocols/tcp/segment';
+export {
+  TcpHost,
+  type TcpContext,
+  type TcpDiscard,
+  type TcpHostOptions,
+} from './protocols/tcp/tcp-host';

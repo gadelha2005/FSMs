@@ -1,0 +1,821 @@
+{
+  "id": "tcp-connection",
+  "initial": "CLOSED",
+  "states": [
+    "CLOSED",
+    "LISTEN",
+    "SYN_SENT",
+    "SYN_RCVD",
+    "ESTABLISHED",
+    "FIN_WAIT_1",
+    "FIN_WAIT_2",
+    "CLOSING",
+    "TIME_WAIT",
+    "CLOSE_WAIT",
+    "LAST_ACK"
+  ],
+  "transitions": [
+    {
+      "from": "CLOSED",
+      "event": "APP_PASSIVE_OPEN",
+      "actions": [
+        { "do": "set", "key": "passive", "value": true },
+        { "do": "set", "key": "retries", "value": 0 }
+      ],
+      "to": "LISTEN",
+      "label": { "event": "passive open" }
+    },
+    {
+      "from": "CLOSED",
+      "event": "APP_ACTIVE_OPEN",
+      "actions": [
+        { "do": "set", "key": "passive", "value": false },
+        { "do": "set", "key": "retries", "value": 0 },
+        { "do": "sendSegment", "flags": ["SYN"], "seq": { "var": "ctx.iss" } },
+        { "do": "set", "key": "sndNxt", "expr": { "+": [{ "var": "ctx.iss" }, 1] } },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "SYN_SENT",
+      "label": { "event": "active open", "action": "send SYN" }
+    },
+    {
+      "from": "CLOSED",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "!": { "var": "event.rst" } }, { "var": "event.ack" }] },
+      "actions": [
+        { "do": "sendSegment", "flags": ["RST"], "seq": { "var": "event.ackNum" }, "reply": true }
+      ],
+      "to": "CLOSED",
+      "label": { "event": "rcv segment (port closed)", "action": "send RST" }
+    },
+    {
+      "from": "CLOSED",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "!": { "var": "event.rst" } }, { "!": { "var": "event.ack" } }] },
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["RST", "ACK"],
+          "seq": 0,
+          "ack": { "+": [{ "var": "event.seq" }, { "var": "event.segLen" }] },
+          "reply": true
+        }
+      ],
+      "to": "CLOSED",
+      "label": { "event": "rcv segment (port closed)", "action": "send RST+ACK" }
+    },
+    {
+      "from": "CLOSED",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "ignore" }
+    },
+    {
+      "from": "LISTEN",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "!": { "var": "event.ack" } },
+          { "!": { "var": "event.rst" } }
+        ]
+      },
+      "actions": [
+        { "do": "bindPeer" },
+        { "do": "set", "key": "irs", "expr": { "var": "event.seq" } },
+        { "do": "set", "key": "rcvNxt", "expr": { "+": [{ "var": "event.seq" }, 1] } },
+        { "do": "set", "key": "sndNxt", "expr": { "+": [{ "var": "ctx.iss" }, 1] } },
+        { "do": "set", "key": "retries", "value": 0 },
+        {
+          "do": "sendSegment",
+          "flags": ["SYN", "ACK"],
+          "seq": { "var": "ctx.iss" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "SYN_RCVD",
+      "label": { "event": "rcv SYN", "action": "send SYN+ACK" }
+    },
+    {
+      "from": "LISTEN",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "var": "event.ack" }, { "!": { "var": "event.rst" } }] },
+      "actions": [
+        { "do": "sendSegment", "flags": ["RST"], "seq": { "var": "event.ackNum" }, "reply": true }
+      ],
+      "to": "LISTEN",
+      "label": { "event": "rcv ACK", "action": "send RST" }
+    },
+    {
+      "from": "LISTEN",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [],
+      "to": "LISTEN",
+      "label": { "event": "rcv RST", "action": "ignore" }
+    },
+    {
+      "from": "LISTEN",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "!": { "var": "event.syn" } },
+          { "!": { "var": "event.ack" } },
+          { "!": { "var": "event.rst" } }
+        ]
+      },
+      "actions": [],
+      "to": "LISTEN",
+      "label": { "event": "rcv other", "action": "ignore" }
+    },
+    {
+      "from": "LISTEN",
+      "event": "APP_CLOSE",
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "close" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "var": "event.ack" },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] }
+        ]
+      },
+      "actions": [
+        { "do": "stopTimer", "timer": "retx" },
+        { "do": "set", "key": "irs", "expr": { "var": "event.seq" } },
+        { "do": "set", "key": "rcvNxt", "expr": { "+": [{ "var": "event.seq" }, 1] } },
+        { "do": "set", "key": "retries", "value": 0 },
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "ESTABLISHED",
+      "label": { "event": "rcv SYN+ACK", "action": "send ACK" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "var": "event.ack" },
+          { "!": { "var": "event.rst" } },
+          { "!": { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] } }
+        ]
+      },
+      "actions": [
+        { "do": "sendSegment", "flags": ["RST"], "seq": { "var": "event.ackNum" }, "reply": true }
+      ],
+      "to": "SYN_SENT",
+      "label": { "event": "rcv SYN+ACK (bad ACK)", "action": "send RST" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "!": { "var": "event.ack" } },
+          { "!": { "var": "event.rst" } }
+        ]
+      },
+      "actions": [
+        { "do": "set", "key": "irs", "expr": { "var": "event.seq" } },
+        { "do": "set", "key": "rcvNxt", "expr": { "+": [{ "var": "event.seq" }, 1] } },
+        {
+          "do": "sendSegment",
+          "flags": ["SYN", "ACK"],
+          "seq": { "var": "ctx.iss" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "SYN_RCVD",
+      "label": { "event": "rcv SYN (simultaneous open)", "action": "send SYN+ACK" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.rst" },
+          { "var": "event.ack" },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] }
+        ]
+      },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST+ACK", "action": "connection refused" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "TIMEOUT_RETX",
+      "guard": { "<": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [
+        { "do": "inc", "key": "retries" },
+        { "do": "sendSegment", "flags": ["SYN"], "seq": { "var": "ctx.iss" } },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "SYN_SENT",
+      "label": { "event": "timeout", "action": "resend SYN" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "TIMEOUT_RETX",
+      "guard": { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "timeout (max retries)", "action": "give up" }
+    },
+    {
+      "from": "SYN_SENT",
+      "event": "APP_CLOSE",
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "close" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.ack" },
+          { "!": { "var": "event.syn" } },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.rcvNxt" }] }
+        ]
+      },
+      "actions": [
+        { "do": "stopTimer", "timer": "retx" },
+        { "do": "set", "key": "retries", "value": 0 }
+      ],
+      "to": "ESTABLISHED",
+      "label": { "event": "rcv ACK" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "var": "event.ack" },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.irs" }] }
+        ]
+      },
+      "actions": [
+        { "do": "stopTimer", "timer": "retx" },
+        { "do": "set", "key": "retries", "value": 0 }
+      ],
+      "to": "ESTABLISHED",
+      "label": { "event": "rcv SYN+ACK (simultaneous open)" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "!": { "var": "event.ack" } },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.irs" }] }
+        ]
+      },
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["SYN", "ACK"],
+          "seq": { "var": "ctx.iss" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "SYN_RCVD",
+      "label": { "event": "rcv SYN (duplicate)", "action": "resend SYN+ACK" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "var": "event.rst" }, { "var": "ctx.passive" }] },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "LISTEN",
+      "label": { "event": "rcv RST (passive open)" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "var": "event.rst" }, { "!": { "var": "ctx.passive" } }] },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST (active open)" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "APP_CLOSE",
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["FIN", "ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "set", "key": "sndNxt", "expr": { "+": [{ "var": "ctx.sndNxt" }, 1] } },
+        { "do": "set", "key": "retries", "value": 0 },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "FIN_WAIT_1",
+      "label": { "event": "close", "action": "send FIN" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "TIMEOUT_RETX",
+      "guard": { "<": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [
+        { "do": "inc", "key": "retries" },
+        {
+          "do": "sendSegment",
+          "flags": ["SYN", "ACK"],
+          "seq": { "var": "ctx.iss" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "SYN_RCVD",
+      "label": { "event": "timeout", "action": "resend SYN+ACK" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "TIMEOUT_RETX",
+      "guard": {
+        "and": [
+          { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+          { "var": "ctx.passive" }
+        ]
+      },
+      "actions": [],
+      "to": "LISTEN",
+      "label": { "event": "timeout (max retries)", "action": "give up" }
+    },
+    {
+      "from": "SYN_RCVD",
+      "event": "TIMEOUT_RETX",
+      "guard": {
+        "and": [
+          { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+          { "!": { "var": "ctx.passive" } }
+        ]
+      },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "timeout (max retries)", "action": "give up" }
+    },
+    {
+      "from": "ESTABLISHED",
+      "event": "APP_CLOSE",
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["FIN", "ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "set", "key": "sndNxt", "expr": { "+": [{ "var": "ctx.sndNxt" }, 1] } },
+        { "do": "set", "key": "retries", "value": 0 },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "FIN_WAIT_1",
+      "label": { "event": "close", "action": "send FIN" }
+    },
+    {
+      "from": "ESTABLISHED",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.fin" },
+          { "!": { "var": "event.rst" } },
+          { "!": { "var": "event.syn" } },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.rcvNxt" }] }
+        ]
+      },
+      "actions": [
+        {
+          "do": "set",
+          "key": "rcvNxt",
+          "expr": { "+": [{ "var": "event.seq" }, { "var": "event.segLen" }] }
+        },
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "CLOSE_WAIT",
+      "label": { "event": "rcv FIN", "action": "send ACK" }
+    },
+    {
+      "from": "ESTABLISHED",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.syn" },
+          { "var": "event.ack" },
+          { "!": { "var": "event.rst" } },
+          { "!": { "var": "event.fin" } }
+        ]
+      },
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "ESTABLISHED",
+      "label": { "event": "rcv SYN+ACK (duplicate)", "action": "resend ACK" }
+    },
+    {
+      "from": "ESTABLISHED",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.ack" },
+          { "!": { "var": "event.syn" } },
+          { "!": { "var": "event.fin" } },
+          { "!": { "var": "event.rst" } }
+        ]
+      },
+      "actions": [],
+      "to": "ESTABLISHED",
+      "label": { "event": "rcv ACK", "action": "ignore" }
+    },
+    {
+      "from": "ESTABLISHED",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "abort" }
+    },
+    {
+      "from": "FIN_WAIT_1",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.ack" },
+          { "!": { "var": "event.fin" } },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] }
+        ]
+      },
+      "actions": [
+        { "do": "stopTimer", "timer": "retx" },
+        { "do": "set", "key": "retries", "value": 0 }
+      ],
+      "to": "FIN_WAIT_2",
+      "label": { "event": "rcv ACK of FIN" }
+    },
+    {
+      "from": "FIN_WAIT_1",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.fin" },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.rcvNxt" }] },
+          { "!": { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] } }
+        ]
+      },
+      "actions": [
+        {
+          "do": "set",
+          "key": "rcvNxt",
+          "expr": { "+": [{ "var": "event.seq" }, { "var": "event.segLen" }] }
+        },
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "CLOSING",
+      "label": { "event": "rcv FIN (simultaneous close)", "action": "send ACK" }
+    },
+    {
+      "from": "FIN_WAIT_1",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.fin" },
+          { "var": "event.ack" },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.rcvNxt" }] },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] }
+        ]
+      },
+      "actions": [
+        { "do": "stopTimer", "timer": "retx" },
+        {
+          "do": "set",
+          "key": "rcvNxt",
+          "expr": { "+": [{ "var": "event.seq" }, { "var": "event.segLen" }] }
+        },
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        {
+          "do": "startTimer",
+          "timer": "timewait",
+          "ms": { "*": [2, { "var": "ctx.msl" }] },
+          "event": "TIMEOUT_TIME_WAIT"
+        }
+      ],
+      "to": "TIME_WAIT",
+      "label": { "event": "rcv FIN+ACK", "action": "send ACK, start 2MSL timer" }
+    },
+    {
+      "from": "FIN_WAIT_1",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "abort" }
+    },
+    {
+      "from": "FIN_WAIT_1",
+      "event": "TIMEOUT_RETX",
+      "guard": { "<": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [
+        { "do": "inc", "key": "retries" },
+        {
+          "do": "sendSegment",
+          "flags": ["FIN", "ACK"],
+          "seq": { "-": [{ "var": "ctx.sndNxt" }, 1] },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "FIN_WAIT_1",
+      "label": { "event": "timeout", "action": "resend FIN" }
+    },
+    {
+      "from": "FIN_WAIT_1",
+      "event": "TIMEOUT_RETX",
+      "guard": { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "timeout (max retries)", "action": "give up" }
+    },
+    {
+      "from": "FIN_WAIT_2",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.fin" },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.seq" }, { "var": "ctx.rcvNxt" }] }
+        ]
+      },
+      "actions": [
+        {
+          "do": "set",
+          "key": "rcvNxt",
+          "expr": { "+": [{ "var": "event.seq" }, { "var": "event.segLen" }] }
+        },
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        {
+          "do": "startTimer",
+          "timer": "timewait",
+          "ms": { "*": [2, { "var": "ctx.msl" }] },
+          "event": "TIMEOUT_TIME_WAIT"
+        }
+      ],
+      "to": "TIME_WAIT",
+      "label": { "event": "rcv FIN", "action": "send ACK, start 2MSL timer" }
+    },
+    {
+      "from": "FIN_WAIT_2",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "abort" }
+    },
+    {
+      "from": "CLOSING",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.ack" },
+          { "!": { "var": "event.fin" } },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] }
+        ]
+      },
+      "actions": [
+        { "do": "stopTimer", "timer": "retx" },
+        {
+          "do": "startTimer",
+          "timer": "timewait",
+          "ms": { "*": [2, { "var": "ctx.msl" }] },
+          "event": "TIMEOUT_TIME_WAIT"
+        }
+      ],
+      "to": "TIME_WAIT",
+      "label": { "event": "rcv ACK of FIN", "action": "start 2MSL timer" }
+    },
+    {
+      "from": "CLOSING",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "var": "event.fin" }, { "!": { "var": "event.rst" } }] },
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "CLOSING",
+      "label": { "event": "rcv FIN (duplicate)", "action": "resend ACK" }
+    },
+    {
+      "from": "CLOSING",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "abort" }
+    },
+    {
+      "from": "CLOSING",
+      "event": "TIMEOUT_RETX",
+      "guard": { "<": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [
+        { "do": "inc", "key": "retries" },
+        {
+          "do": "sendSegment",
+          "flags": ["FIN", "ACK"],
+          "seq": { "-": [{ "var": "ctx.sndNxt" }, 1] },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "CLOSING",
+      "label": { "event": "timeout", "action": "resend FIN" }
+    },
+    {
+      "from": "CLOSING",
+      "event": "TIMEOUT_RETX",
+      "guard": { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "timeout (max retries)", "action": "give up" }
+    },
+    {
+      "from": "TIME_WAIT",
+      "event": "TIMEOUT_TIME_WAIT",
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "timeout 2MSL" }
+    },
+    {
+      "from": "TIME_WAIT",
+      "event": "RCV_SEGMENT",
+      "guard": { "and": [{ "var": "event.fin" }, { "!": { "var": "event.rst" } }] },
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        {
+          "do": "startTimer",
+          "timer": "timewait",
+          "ms": { "*": [2, { "var": "ctx.msl" }] },
+          "event": "TIMEOUT_TIME_WAIT"
+        }
+      ],
+      "to": "TIME_WAIT",
+      "label": { "event": "rcv FIN (retransmitted)", "action": "send ACK, restart 2MSL timer" }
+    },
+    {
+      "from": "CLOSE_WAIT",
+      "event": "APP_CLOSE",
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["FIN", "ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "set", "key": "sndNxt", "expr": { "+": [{ "var": "ctx.sndNxt" }, 1] } },
+        { "do": "set", "key": "retries", "value": 0 },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "LAST_ACK",
+      "label": { "event": "close", "action": "send FIN" }
+    },
+    {
+      "from": "CLOSE_WAIT",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.fin" },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.seq" }, { "-": [{ "var": "ctx.rcvNxt" }, 1] }] }
+        ]
+      },
+      "actions": [
+        {
+          "do": "sendSegment",
+          "flags": ["ACK"],
+          "seq": { "var": "ctx.sndNxt" },
+          "ack": { "var": "ctx.rcvNxt" }
+        }
+      ],
+      "to": "CLOSE_WAIT",
+      "label": { "event": "rcv FIN (duplicate)", "action": "resend ACK" }
+    },
+    {
+      "from": "CLOSE_WAIT",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "abort" }
+    },
+    {
+      "from": "LAST_ACK",
+      "event": "RCV_SEGMENT",
+      "guard": {
+        "and": [
+          { "var": "event.ack" },
+          { "!": { "var": "event.fin" } },
+          { "!": { "var": "event.rst" } },
+          { "==": [{ "var": "event.ackNum" }, { "var": "ctx.sndNxt" }] }
+        ]
+      },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "rcv ACK of FIN" }
+    },
+    {
+      "from": "LAST_ACK",
+      "event": "RCV_SEGMENT",
+      "guard": { "var": "event.rst" },
+      "actions": [{ "do": "stopTimer", "timer": "retx" }],
+      "to": "CLOSED",
+      "label": { "event": "rcv RST", "action": "abort" }
+    },
+    {
+      "from": "LAST_ACK",
+      "event": "TIMEOUT_RETX",
+      "guard": { "<": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [
+        { "do": "inc", "key": "retries" },
+        {
+          "do": "sendSegment",
+          "flags": ["FIN", "ACK"],
+          "seq": { "-": [{ "var": "ctx.sndNxt" }, 1] },
+          "ack": { "var": "ctx.rcvNxt" }
+        },
+        { "do": "startTimer", "timer": "retx", "ms": { "var": "ctx.rto" }, "event": "TIMEOUT_RETX" }
+      ],
+      "to": "LAST_ACK",
+      "label": { "event": "timeout", "action": "resend FIN" }
+    },
+    {
+      "from": "LAST_ACK",
+      "event": "TIMEOUT_RETX",
+      "guard": { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [],
+      "to": "CLOSED",
+      "label": { "event": "timeout (max retries)", "action": "give up" }
+    }
+  ]
+}
