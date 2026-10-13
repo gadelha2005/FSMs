@@ -1,0 +1,112 @@
+{
+  "id": "tcp-sender",
+  "initial": "IDLE",
+  "states": ["IDLE", "SENDING", "FAILED"],
+  "transitions": [
+    {
+      "from": "IDLE",
+      "event": "APP_SEND",
+      "actions": [{ "do": "sendWindow" }, { "do": "startTimer" }],
+      "to": "SENDING",
+      "label": { "event": "data from app", "action": "send window, start timer" }
+    },
+    {
+      "from": "SENDING",
+      "event": "APP_SEND",
+      "actions": [{ "do": "sendWindow" }],
+      "to": "SENDING",
+      "label": { "event": "data from app", "action": "send what fits in window" }
+    },
+    {
+      "from": "SENDING",
+      "event": "ACK_NEW",
+      "guard": {
+        "and": [
+          { "==": [{ "var": "event.ack" }, { "var": "ctx.nextSeq" }] },
+          { "==": [{ "var": "ctx.pending" }, 0] }
+        ]
+      },
+      "actions": [
+        { "do": "sampleRtt" },
+        { "do": "advance" },
+        { "do": "set", "key": "dupAckCount", "value": 0 },
+        { "do": "set", "key": "retries", "value": 0 },
+        { "do": "stopTimer" }
+      ],
+      "to": "IDLE",
+      "label": { "event": "ACK for all data", "action": "sample RTT, stop timer" }
+    },
+    {
+      "from": "SENDING",
+      "event": "ACK_NEW",
+      "guard": {
+        "!": {
+          "and": [
+            { "==": [{ "var": "event.ack" }, { "var": "ctx.nextSeq" }] },
+            { "==": [{ "var": "ctx.pending" }, 0] }
+          ]
+        }
+      },
+      "actions": [
+        { "do": "sampleRtt" },
+        { "do": "advance" },
+        { "do": "set", "key": "dupAckCount", "value": 0 },
+        { "do": "set", "key": "retries", "value": 0 },
+        { "do": "sendWindow" },
+        { "do": "startTimer" }
+      ],
+      "to": "SENDING",
+      "label": { "event": "new ACK", "action": "advance window, send more, restart timer" }
+    },
+    {
+      "from": "SENDING",
+      "event": "ACK_DUP",
+      "guard": { "<": [{ "var": "ctx.dupAckCount" }, 2] },
+      "actions": [{ "do": "inc", "key": "dupAckCount" }],
+      "to": "SENDING",
+      "label": { "event": "duplicate ACK", "action": "count it" }
+    },
+    {
+      "from": "SENDING",
+      "event": "ACK_DUP",
+      "guard": { "==": [{ "var": "ctx.dupAckCount" }, 2] },
+      "actions": [
+        { "do": "inc", "key": "dupAckCount" },
+        { "do": "retransmitBase", "reason": "fast" },
+        { "do": "startTimer" }
+      ],
+      "to": "SENDING",
+      "label": { "event": "3rd duplicate ACK", "action": "fast retransmit SendBase" }
+    },
+    {
+      "from": "SENDING",
+      "event": "ACK_DUP",
+      "guard": { ">": [{ "var": "ctx.dupAckCount" }, 2] },
+      "actions": [],
+      "to": "SENDING",
+      "label": { "event": "more duplicate ACKs", "action": "ignore" }
+    },
+    {
+      "from": "SENDING",
+      "event": "TIMEOUT",
+      "guard": { "<": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [
+        { "do": "inc", "key": "retries" },
+        { "do": "set", "key": "dupAckCount", "value": 0 },
+        { "do": "retransmitBase", "reason": "timeout" },
+        { "do": "backoff" },
+        { "do": "startTimer" }
+      ],
+      "to": "SENDING",
+      "label": { "event": "timeout", "action": "retransmit SendBase, double timeout" }
+    },
+    {
+      "from": "SENDING",
+      "event": "TIMEOUT",
+      "guard": { ">=": [{ "var": "ctx.retries" }, { "var": "ctx.maxRetries" }] },
+      "actions": [],
+      "to": "FAILED",
+      "label": { "event": "timeout", "action": "give up" }
+    }
+  ]
+}

@@ -59,3 +59,12 @@ export {
   type TcpDiscard,
   type TcpHostOptions,
 } from './protocols/tcp/tcp-host';
+export { TcpReceiver, type ReceiveKind, type ReceiveRecord } from './protocols/tcp/receiver';
+export {
+  TcpSender,
+  type SenderContext,
+  type TcpSenderOptions,
+  type Transmission,
+  type TransmissionKind,
+} from './protocols/tcp/sender';
+export { RTT_ALPHA, RTT_BETA, backoffTimeout, updateRtt, type RttState } from './protocols/tcp/rtt';

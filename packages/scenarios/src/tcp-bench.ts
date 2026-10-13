@@ -8,6 +8,7 @@ import {
   type SentFrame,
 } from '@fsms/core';
 import tcpDefinition from '../../definitions/tcp-connection.json';
+import senderDefinition from '../../definitions/tcp-sender.json';
 
 export interface TcpBench {
   scheduler: Scheduler;
@@ -24,6 +25,9 @@ export interface TcpBenchOptions {
   rtoB?: number;
   msl?: number;
   maxRetries?: number;
+  mss?: number;
+  windowSegments?: number;
+  minTimeout?: number;
 }
 
 export function buildTcpBench(options: TcpBenchOptions = {}): TcpBench {
@@ -39,6 +43,10 @@ export function buildTcpBench(options: TcpBenchOptions = {}): TcpBench {
     scheduler,
     channel,
     definition: tcpDefinition,
+    senderDefinition,
+    mss: options.mss,
+    windowSegments: options.windowSegments,
+    minTimeout: options.minTimeout,
     rto: options.rto,
     msl: options.msl,
     maxRetries: options.maxRetries,

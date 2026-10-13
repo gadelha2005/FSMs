@@ -12,3 +12,4 @@ export {
   scenario7,
   tcpConnectionScenarios,
 } from './tcp';
+export { scenario6, tcpTransferScenarios } from './tcp-transfer';
