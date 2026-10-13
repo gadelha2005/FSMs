@@ -27,3 +27,15 @@ export type { Summary, Trial } from './compare';
 export { allScenarios, runAll, runScenario } from './runner';
 export { formatConsole, toJson, toMarkdown } from './report';
 export type { ComparisonMetrics } from './compare';
+export { DEFAULT_TCP_SETTINGS, Simulation } from './simulation';
+export type {
+  Command,
+  CommandResult,
+  HostInfo,
+  HostName,
+  LogEntry,
+  LogLayer,
+  ProtocolName,
+  SimulationOptions,
+  TcpSettings,
+} from './simulation';
