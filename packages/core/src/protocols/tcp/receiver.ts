@@ -8,12 +8,19 @@ export interface ReceiveRecord {
   ack: number;
 }
 
+export interface Delivery {
+  time: number;
+  seq: number;
+  length: number;
+}
+
 export interface ReceiverConnection {
   rcvNxt: number;
 }
 
 export class TcpReceiver {
   readonly log: ReceiveRecord[] = [];
+  readonly deliveries: Delivery[] = [];
 
   private readonly buffer = new Map<number, Uint8Array>();
   private readonly chunks: Uint8Array[] = [];
@@ -69,6 +76,11 @@ export class TcpReceiver {
   }
 
   private deliver(payload: Uint8Array): void {
+    this.deliveries.push({
+      time: this.clock(),
+      seq: this.connection.rcvNxt,
+      length: payload.length,
+    });
     this.chunks.push(payload);
     this.connection.rcvNxt += payload.length;
   }

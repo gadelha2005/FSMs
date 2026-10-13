@@ -22,6 +22,7 @@ export interface SenderContext extends Record<string, unknown> {
   estRtt: number;
   devRtt: number;
   timeout: number;
+  initialTimeout: number;
   rttSamples: number;
   minTimeout: number;
   maxTimeout: number;
@@ -83,6 +84,7 @@ export class TcpSender {
       estRtt: 0,
       devRtt: 0,
       timeout: options.rto ?? 1000,
+      initialTimeout: options.rto ?? 1000,
       rttSamples: 0,
       minTimeout: options.minTimeout ?? 200,
       maxTimeout: options.maxTimeout ?? 60_000,
@@ -98,6 +100,12 @@ export class TcpSender {
         retransmitBase: ({ ctx, params }) => this.retransmitBase(ctx, String(params.reason)),
         sampleRtt: ({ ctx, event }) => this.sampleRtt(ctx, Number(event.payload?.ack)),
         advance: ({ ctx, event }) => this.advance(ctx, Number(event.payload?.ack)),
+        resetBackoff: ({ ctx }) => {
+          ctx.timeout =
+            ctx.rttSamples > 0
+              ? Math.max(ctx.minTimeout, ctx.estRtt + 4 * ctx.devRtt)
+              : ctx.initialTimeout;
+        },
         backoff: ({ ctx }) => {
           ctx.timeout = backoffTimeout(ctx.timeout, ctx.maxTimeout);
         },
@@ -184,9 +192,11 @@ export class TcpSender {
   private sampleRtt(ctx: SenderContext, ack: number): void {
     let last: Outstanding | undefined;
     for (const segment of this.outstanding.values()) {
-      if (segment.seq + segment.payload.length <= ack) last = segment;
+      if (segment.seq + segment.payload.length > ack) continue;
+      if (segment.retransmitted) return;
+      last = segment;
     }
-    if (!last || last.retransmitted) return;
+    if (!last) return;
 
     const next = updateRtt(ctx, this.scheduler.now - last.sentAt, ctx.minTimeout);
     ctx.estRtt = next.estRtt;

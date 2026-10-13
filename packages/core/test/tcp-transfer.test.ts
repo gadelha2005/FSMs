@@ -168,6 +168,25 @@ describe('TcpSender: perdas', () => {
     expect(times[3]! - times[2]!).toBe(4000);
   });
 
+  it('um ACK novo desfaz o backoff e o timeout volta ao valor base', () => {
+    const { a, channel, scheduler } = build();
+    channel.addRule({ match: { from: 'A', kind: 'data' }, action: 'drop', nth: 1, count: 2 });
+    a.send(pattern(100));
+    scheduler.runAll();
+    const tx = a.sender!.transmissions;
+    expect(tx.map((t) => t.kind)).toEqual(['new', 'timeout', 'timeout']);
+    expect(tx[2]!.time - tx[1]!.time).toBe(2000);
+    expect(a.sender!.fsm.context.timeout).toBe(1000);
+  });
+
+  it('ACK que cobre um segmento retransmitido não gera amostra, mesmo com segmentos novos junto', () => {
+    const { a, channel, scheduler } = build();
+    channel.addRule({ match: { from: 'A', kind: 'data' }, action: 'drop', nth: 1 });
+    a.send(pattern(300));
+    scheduler.runAll();
+    expect(a.sender!.fsm.context.rttSamples).toBe(0);
+  });
+
   it('depois de maxRetries estouros, o remetente desiste em FAILED', () => {
     const { a, channel, scheduler } = build({ maxRetries: 2 });
     channel.addRule({ match: { from: 'A', kind: 'data' }, action: 'drop', nth: 1, count: 100 });

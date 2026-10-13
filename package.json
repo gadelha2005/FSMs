@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc -b",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "scenarios": "tsx packages/scenarios/src/cli.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

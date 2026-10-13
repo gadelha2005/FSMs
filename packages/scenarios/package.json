@@ -5,10 +5,23 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "scripts": {
+    "dev": "npm run dev -w @fsms/web",
+    "build": "npm run build -w @fsms/web",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "scenarios": "tsx packages/scenarios/src/cli.ts"
+  },
   "exports": {
     ".": "./src/index.ts"
   },
   "dependencies": {
     "@fsms/core": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
   }
 }

@@ -13,3 +13,17 @@ export {
   tcpConnectionScenarios,
 } from './tcp';
 export { scenario6, tcpTransferScenarios } from './tcp-transfer';
+export {
+  COMPARISON_SEEDS,
+  MAIN_SEED,
+  MESSAGES,
+  NOISY_CHANNEL,
+  runTcpTrial,
+  runUdpTrial,
+  scenario10,
+  summarize,
+} from './compare';
+export type { Summary, Trial } from './compare';
+export { allScenarios, runAll, runScenario } from './runner';
+export { formatConsole, toJson, toMarkdown } from './report';
+export type { ComparisonMetrics } from './compare';

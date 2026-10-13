@@ -5,9 +5,9 @@ const bytes = (...values: number[]) => Uint8Array.from(values);
 
 function build(rcvNxt = 1000) {
   const connection = { rcvNxt };
-  let now = 0;
-  const receiver = new TcpReceiver(connection, () => now++);
-  return { connection, receiver };
+  const state = { now: 0 };
+  const receiver = new TcpReceiver(connection, () => state.now);
+  return { connection, receiver, state };
 }
 
 describe('TcpReceiver: ACK cumulativo', () => {
@@ -57,12 +57,24 @@ describe('TcpReceiver: ACK cumulativo', () => {
   });
 
   it('o log registra tempo, seq, tamanho, tipo e ack de cada chegada', () => {
-    const { receiver } = build();
+    const { receiver, state } = build();
     receiver.onData(1000, bytes(1));
+    state.now = 1;
     receiver.onData(1005, bytes(9));
     expect(receiver.log).toEqual([
       { time: 0, seq: 1000, length: 1, kind: 'in-order', ack: 1001 },
       { time: 1, seq: 1005, length: 1, kind: 'out-of-order', ack: 1001 },
+    ]);
+  });
+
+  it('deliveries registra quando cada bloco foi entregue à aplicação', () => {
+    const { receiver, state } = build();
+    receiver.onData(1002, bytes(3, 4));
+    state.now = 5;
+    receiver.onData(1000, bytes(1, 2));
+    expect(receiver.deliveries).toEqual([
+      { time: 5, seq: 1000, length: 2 },
+      { time: 5, seq: 1002, length: 2 },
     ]);
   });
 });
