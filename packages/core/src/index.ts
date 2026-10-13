@@ -22,3 +22,21 @@ export type {
   SentFrame,
 } from './channel/channel';
 export { DEFAULT_CHANNEL_PARAMS, validateParams, type ChannelParams } from './channel/params';
+export { checksumIsValid, internetChecksum, onesComplementSum } from './protocols/udp/checksum';
+export {
+  UDP_HEADER_LENGTH,
+  decodeDatagram,
+  encodeDatagram,
+  type DecodeFailure,
+  type DecodeResult,
+  type UdpDatagram,
+} from './protocols/udp/datagram';
+export {
+  UdpHost,
+  type UdpCounters,
+  type UdpDiscard,
+  type UdpDiscardReason,
+  type UdpHostOptions,
+  type UdpReceived,
+} from './protocols/udp/udp-host';
+export { analyzeDelivery, packId, unpackId, type DeliveryReport } from './analysis/delivery';

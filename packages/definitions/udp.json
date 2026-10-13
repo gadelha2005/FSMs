@@ -1,0 +1,44 @@
+{
+  "id": "udp",
+  "initial": "READY",
+  "states": ["READY"],
+  "transitions": [
+    {
+      "from": "READY",
+      "event": "APP_SEND",
+      "actions": [{ "do": "sendDatagram" }, { "do": "inc", "key": "sent" }],
+      "to": "READY",
+      "label": { "event": "send(dados)", "action": "enviar datagrama" }
+    },
+    {
+      "from": "READY",
+      "event": "RCV_DATAGRAM",
+      "guard": { "and": [{ "var": "event.valid" }, { "var": "event.portOk" }] },
+      "actions": [{ "do": "deliverToApp" }, { "do": "inc", "key": "delivered" }],
+      "to": "READY",
+      "label": { "event": "datagrama recebido [checksum ok]", "action": "entregar à aplicação" }
+    },
+    {
+      "from": "READY",
+      "event": "RCV_DATAGRAM",
+      "guard": { "!": { "var": "event.valid" } },
+      "actions": [{ "do": "discard" }, { "do": "inc", "key": "discarded" }],
+      "to": "READY",
+      "label": {
+        "event": "datagrama recebido [checksum inválido]",
+        "action": "descartar em silêncio"
+      }
+    },
+    {
+      "from": "READY",
+      "event": "RCV_DATAGRAM",
+      "guard": { "and": [{ "var": "event.valid" }, { "!": { "var": "event.portOk" } }] },
+      "actions": [{ "do": "discard" }, { "do": "inc", "key": "discarded" }],
+      "to": "READY",
+      "label": {
+        "event": "datagrama recebido [porta sem aplicação]",
+        "action": "descartar em silêncio"
+      }
+    }
+  ]
+}
