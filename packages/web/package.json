@@ -9,10 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@dagrejs/dagre": "^3.1.1",
     "@fsms/core": "*",
     "@fsms/scenarios": "*",
+    "@xyflow/react": "^12.12.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@types/react": "^19.2.0",

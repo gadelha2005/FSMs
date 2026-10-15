@@ -1,95 +1,37 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import type { ChannelParams } from '@fsms/core';
-import {
-  DEFAULT_TCP_SETTINGS,
-  Simulation,
-  type ProtocolName,
-  type TcpSettings,
-} from '@fsms/scenarios';
-import { AppActions } from './components/AppActions';
-import { ChannelPanel } from './components/ChannelPanel';
-import { Controls } from './components/Controls';
-import { HostCards } from './components/HostCards';
-import { LogTable } from './components/LogTable';
-import { ProtocolSelector } from './components/ProtocolSelector';
-import { SetupPanel } from './components/SetupPanel';
-import { nextStepHint } from './guide';
-import { useClock } from './sim/useClock';
-import { useSimulationVersion } from './sim/useSimulation';
+import { useState } from 'react';
+import { CompareView } from './CompareView';
+import { SimulationView } from './SimulationView';
+
+type Tab = 'sim' | 'compare';
+
+const tabs: { id: Tab; label: string }[] = [
+  { id: 'sim', label: 'Simulação' },
+  { id: 'compare', label: 'Comparação UDP × TCP' },
+];
 
 export function App() {
-  const [protocol, setProtocol] = useState<ProtocolName>('TCP');
-  const [seed, setSeed] = useState(1);
-  const [tcp, setTcp] = useState<TcpSettings>(DEFAULT_TCP_SETTINGS);
-  const [speed, setSpeed] = useState(1);
-  const [running, setRunning] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
-  const channelRef = useRef<Partial<ChannelParams>>({});
-
-  const sim = useMemo(
-    () => new Simulation({ protocol, seed, tcp, channel: channelRef.current }),
-    [protocol, seed, tcp, resetKey],
-  );
-
-  useSimulationVersion(sim);
-  useClock(sim, running, speed);
-
-  const restart = useCallback(() => {
-    setRunning(false);
-    setResetKey((k) => k + 1);
-  }, []);
-
-  const changeProtocol = (next: ProtocolName) => {
-    setRunning(false);
-    setProtocol(next);
-  };
-
-  const changeChannel = (partial: Partial<ChannelParams>) => {
-    channelRef.current = { ...channelRef.current, ...partial };
-  };
+  const [tab, setTab] = useState<Tab>('sim');
 
   return (
     <div className="app">
       <header className="topbar">
         <h1>Simulador de FSMs: UDP e TCP</h1>
-        <ProtocolSelector value={protocol} onChange={changeProtocol} />
+        <div className="segmented" role="tablist" aria-label="Telas">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              role="tab"
+              aria-selected={tab === t.id}
+              className={tab === t.id ? 'segment active' : 'segment'}
+              onClick={() => setTab(t.id)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </header>
-      <div className="layout">
-        <aside className="sidebar">
-          <Controls
-            sim={sim}
-            running={running}
-            speed={speed}
-            onToggle={() => setRunning((r) => !r)}
-            onSpeed={setSpeed}
-            onReset={restart}
-          />
-          <AppActions key={`${protocol}-${seed}-${resetKey}`} sim={sim} />
-          <ChannelPanel sim={sim} onChange={changeChannel} />
-          <SetupPanel
-            protocol={protocol}
-            seed={seed}
-            tcp={tcp}
-            onSeed={(value) => {
-              setRunning(false);
-              setSeed(value);
-            }}
-            onTcp={(value) => {
-              setRunning(false);
-              setTcp(value);
-            }}
-          />
-        </aside>
-        <main className="content">
-          {protocol === 'TCP' && (
-            <p className="hint" role="status">
-              {nextStepHint(sim.hosts(), sim.idle)}
-            </p>
-          )}
-          <HostCards sim={sim} />
-          <LogTable sim={sim} />
-        </main>
-      </div>
+      {tab === 'sim' ? <SimulationView /> : <CompareView />}
     </div>
   );
 }

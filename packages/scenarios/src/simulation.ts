@@ -3,9 +3,11 @@ import {
   Scheduler,
   TcpHost,
   UdpHost,
+  FsmDefinitionSchema,
   createRng,
   type ChannelEvent,
   type ChannelParams,
+  type FsmDefinition,
   type FsmTrace,
 } from '@fsms/core';
 import tcpDefinition from '../../definitions/tcp-connection.json';
@@ -59,6 +61,12 @@ export interface HostInfo {
   senderState?: string;
   details: { label: string; value: string }[];
 }
+
+export const FSM_DEFINITIONS: Record<LogLayer, FsmDefinition> = {
+  conexão: FsmDefinitionSchema.parse(tcpDefinition),
+  remetente: FsmDefinitionSchema.parse(senderDefinition),
+  UDP: FsmDefinitionSchema.parse(udpDefinition),
+};
 
 export const DEFAULT_TCP_SETTINGS: TcpSettings = { msl: 5000, rto: 1000 };
 

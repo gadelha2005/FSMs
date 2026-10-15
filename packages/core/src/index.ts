@@ -59,7 +59,12 @@ export {
   type TcpDiscard,
   type TcpHostOptions,
 } from './protocols/tcp/tcp-host';
-export { TcpReceiver, type Delivery, type ReceiveKind, type ReceiveRecord } from './protocols/tcp/receiver';
+export {
+  TcpReceiver,
+  type Delivery,
+  type ReceiveKind,
+  type ReceiveRecord,
+} from './protocols/tcp/receiver';
 export {
   TcpSender,
   type SenderContext,
